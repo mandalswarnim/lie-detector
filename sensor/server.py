@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
 import sys
 import time
 
@@ -60,12 +61,14 @@ class Server:
         d = f["dbg"]
         bpm = "  --" if f["bpm"] is None else f"{f['bpm']:5.1f}"
         lock = "LOCK" if f["bpm_locked"] else ("hold" if f["bpm_held"] else "....")
-        rec = f"  REC {self.recorder.seconds():5.1f}s" if self.recorder else ""
-        sys.stderr.write(
-            f"\r\033[K t={f['t']:6.1f}  contact={'ON ' if f['contact'] else 'off'} "
-            f"fidget={f['fidget']:.2f}  bpm={bpm} {lock} conf={f['bpm_conf']:.2f} "
-            f"raw={d['raw_bpm']} ch={d['best_ch']}  crms={d['contact_rms']:.2e} "
-            f"fs={d['fs'][0]:.0f}/{d['fs'][1]:.0f}  clients={len(self.clients)}{rec}")
+        rec = f" REC {self.recorder.seconds():.0f}s" if self.recorder else ""
+        raw = "  --" if d["raw_bpm"] is None else f"{d['raw_bpm']:5.1f}"
+        line = (f"{rec} t={f['t']:5.0f} {'ON ' if f['contact'] else 'off'} fid={f['fidget']:.2f} "
+                f"bpm={bpm} {lock} conf={f['bpm_conf']:.2f} raw={raw} {d['best_ch']} "
+                f"crms={d['contact_rms']:.1e} fs={d['fs'][0]:.0f}/{d['fs'][1]:.0f} ws={len(self.clients)}")
+        # never wider than the terminal, or \r can't redraw it and the screen smears
+        width = shutil.get_terminal_size((100, 20)).columns - 1
+        sys.stderr.write("\r\033[K" + line[:width])
         sys.stderr.flush()
 
     async def run(self) -> None:
