@@ -96,6 +96,9 @@ Or let a script walk you through all of them: `./tools/record_all.sh` (round 1) 
   800 Hz beats dropping to 100 Hz (25-30% vs 14-26%) but not enough. Lock thresholds stay strict, so the
   machine never shows a confident wrong BPM: it will usually say "SUBJECT'S HEART UNREADABLE — HIGHLY
   SUSPICIOUS" after 12 s, which is the planned joke.
+- **Hand position (round 3):** palm rest, firm inner-wrist press, forearms across, hands flat on the
+  keys and fingertips on the lid all stay at the noise level (<= 4 dB, <= 42% of estimates right).
+  Keep the palm rest.
 - Mains-like tones exist at ~100, 34 and 65 Hz but are far above the pulse and fidget bands. The
   "50Hz/25Hz/12Hz" tags in motion_live.py are just wavelet band labels.
 
