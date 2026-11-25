@@ -34,7 +34,7 @@ class Chunk:
 class RealSource:
     name = "real"
 
-    def __init__(self, rate: int = 100):
+    def __init__(self, rate: int = 800):
         from macimu import IMU
         self.rate = rate
         self.imu = IMU(accel=True, gyro=True, als=True, lid=True, sample_rate=rate)
@@ -94,6 +94,9 @@ class FakeSource:
         self.zi_tremor = np.zeros((self.tremor.shape[0], 2, 6))
         self.fid_sos = signal.butter(2, [3, 20], btype="band", fs=fs, output="sos")
         self.zi_fid = np.zeros((self.fid_sos.shape[0], 2, 6))
+        # keep the synthetic beat below the fidget band (sharp edges -> 3-5 Hz harmonics)
+        self.beat_sos = signal.butter(4, 2.5, btype="low", fs=fs, output="sos")
+        self.zi_beat = np.zeros((self.beat_sos.shape[0], 2))
         self.bursts: list[tuple[float, float, float]] = []
         self._plan_loop(0)
 
@@ -133,7 +136,7 @@ class FakeSource:
         bpm = self.bpm_at(t)
         ph = self.phase + np.cumsum(bpm / 60.0 / fs)
         self.phase = ph[-1] % 1.0
-        beat = _bcg_shape(ph % 1.0) * amp
+        beat, self.zi_beat = signal.sosfilt(self.beat_sos, _bcg_shape(ph % 1.0) * amp, zi=self.zi_beat)
 
         fid = np.zeros(n)
         for a, b, v in self.bursts:
@@ -148,6 +151,7 @@ class FakeSource:
 
         accel = np.empty((n, 3))
         accel[:] = (0.012, -0.020, -0.999)                       # gravity, slight tilt
+        accel[:, 1] -= 0.002 * contact                           # wrists tip the chassis ~2 mg (as measured)
         accel += 1.0e-4 * rng.standard_normal((n, 3))            # sensor noise
         accel += 4.0e-4 * trem[:, :3] * contact[:, None]         # physiological tremor
         accel += 6.0e-4 * beat[:, None] * np.array([0.2, 0.5, 1.0])

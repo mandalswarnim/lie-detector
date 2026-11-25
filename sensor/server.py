@@ -65,7 +65,7 @@ class Server:
         raw = "  --" if d["raw_bpm"] is None else f"{d['raw_bpm']:5.1f}"
         line = (f"{rec} t={f['t']:5.0f} {'ON ' if f['contact'] else 'off'} fid={f['fidget']:.2f} "
                 f"bpm={bpm} {lock} conf={f['bpm_conf']:.2f} raw={raw} {d['best_ch']} "
-                f"crms={d['contact_rms']:.1e} fs={d['fs'][0]:.0f}/{d['fs'][1]:.0f} ws={len(self.clients)}")
+                f"tilt={d['tilt_mg']:+.1f}mg fs={d['fs'][0]:.0f}/{d['fs'][1]:.0f} ws={len(self.clients)}")
         # never wider than the terminal, or \r can't redraw it and the screen smears
         width = shutil.get_terminal_size((100, 20)).columns - 1
         sys.stderr.write("\r\033[K" + line[:width])

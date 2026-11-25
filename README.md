@@ -76,7 +76,22 @@ sudo .venv/bin/python -m sensor --record fidget_1  --true-bpm 72 --seconds 60 --
 sudo .venv/bin/python -m sensor --record off_1     --seconds 30 --notes "wrists OFF the laptop"
 ```
 
-Or let a script walk you through all of them: `./tools/record_all.sh`
+Or let a script walk you through all of them: `./tools/record_all.sh` (round 1) and
+`./tools/record_all.sh round2` (800 Hz, wrists on/off test, still, small/big fidget, leaning on the table).
+
+## What the first recordings showed (M4, 2026-11-25)
+
+- **Contact:** vibration energy is the sensor's noise floor whether wrists are on or off, so it can't
+  detect contact. Wrists on the palm rest tip the chassis instead: accel Y DC moves ~2 mg. Contact
+  is that tilt against an empty reference (`contact_axis`, `contact_on_mg`). Still being confirmed
+  by `onoff_1`.
+- **Fidget:** the accelerometer at 3-5 Hz separates fidgeting from stillness 4.2x (5-20 Hz: 2.1x).
+  The gyro showed no separation, so it's left out of fidget.
+- **Heartbeat:** at macimu's default 100 Hz it is buried in sensor noise (estimate within ±5 BPM of the
+  watch 7-25% of the time vs ~8% by chance; no lock). macimu reaches 100 Hz by *dropping* 7 of 8
+  samples, which folds high-frequency noise into our band. We now read 800 Hz and *average* to
+  100 Hz (`imu_rate`, `decimate`); round-2 recordings measure whether that rescues the pulse.
+  The "50Hz/25Hz/12Hz" tags in motion_live.py are just wavelet band labels; no such noise exists.
 
 Then `.venv/bin/python tools/tune.py recordings/*.npz`.
 

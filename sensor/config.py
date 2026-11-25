@@ -10,7 +10,9 @@ from dataclasses import dataclass, fields, replace
 
 @dataclass(frozen=True)
 class Config:
-    fs_nominal: float = 100.0          # macimu sample_rate=100 -> decimation 8
+    fs_nominal: float = 100.0          # DSP rate; faster input is reduced to this
+    imu_rate: int = 800                # rate we ask macimu for (800 = native, no dropping)
+    decimate: str = "mean"             # "mean" (block average) | "drop" (macimu-style, for A/B)
 
     # --- heartbeat (BCG) ---
     pulse_lo_hz: float = 0.8
@@ -32,20 +34,22 @@ class Config:
     motion_gate: float = 0.3           # fidget above this taints the ACF window for acf_window_s
 
     # --- fidget ---
-    fidget_lo_hz: float = 5.0
-    fidget_hi_hz: float = 20.0
+    # 3-5 Hz accel separated fidget from stillness 4.2x vs 2.1x for 5-20 Hz (fidget_1);
+    # gyro showed no separation at all, so it is left out.
+    fidget_lo_hz: float = 3.0
+    fidget_hi_hz: float = 5.0
+    fidget_gyro: int = 0
     fidget_win_s: float = 1.0
-    fidget_dead: float = 0.10          # log10 ratio dead-zone above baseline
-    fidget_span: float = 1.0           # log10 ratio that maps to fidget = 1 (10x baseline)
+    fidget_dead: float = 0.20          # log10 ratio dead-zone above baseline (still p95 ~0.02)
+    fidget_span: float = 0.7           # log10 ratio over dead-zone that maps to fidget = 1
     baseline_win_s: float = 30.0       # auto baseline: rolling percentile window
     baseline_pct: float = 10.0
 
-    # --- contact (wrists on / off) ---
-    contact_mode: str = "auto"         # "auto" | "always" (venue fallback)
-    contact_lo_hz: float = 1.0
-    contact_hi_hz: float = 20.0
-    contact_on_g: float = 2.0e-4       # accel 1-20 Hz RMS to declare contact (GUESS)
-    contact_off_g: float = 1.5e-4      # ... and to release it            (GUESS)
+    # --- contact (wrists on / off): chassis tilt, see Pipeline._update_contact ---
+    contact_mode: str = "auto"         # "auto" (tilt) | "always" (venue fallback)
+    contact_axis: str = "y-"           # wrists push accel y more negative on the M4
+    contact_on_mg: float = 1.0         # tilt to declare contact (measured: ~2 mg on, <0.4 mg jitter)
+    contact_off_mg: float = 0.5        # ... and to release it
     contact_debounce_s: float = 0.5
 
 

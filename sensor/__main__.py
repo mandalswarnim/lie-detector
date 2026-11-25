@@ -44,14 +44,15 @@ def main() -> None:
         if os.geteuid() != 0:
             sys.exit("Real IMU needs root:  sudo .venv/bin/python -m sensor\n"
                      "(or run without hardware:  .venv/bin/python -m sensor --fake)")
-        source = RealSource(rate=int(cfg.fs_nominal))
+        source = RealSource(rate=cfg.imu_rate)
 
     if a.record and a.true_bpm is None and not a.fake:
         print("[sensor] warning: --record without --true-bpm; tuning can't score this one", file=sys.stderr)
     recorder = Recorder(a.record, a.true_bpm, a.notes, source.name) if a.record else None
 
     meta = getattr(source, "meta", {})
-    pipeline = Pipeline(cfg, meta.get("fs_accel"), meta.get("fs_gyro"))
+    fs_in = getattr(source, "rate", None) or getattr(source, "fs", None)
+    pipeline = Pipeline(cfg, meta.get("fs_accel") or fs_in, meta.get("fs_gyro") or fs_in)
     server = Server(source, pipeline, recorder, port=a.port, seconds=a.seconds, quiet=a.quiet)
     try:
         asyncio.run(server.run())

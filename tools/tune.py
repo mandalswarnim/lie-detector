@@ -48,7 +48,7 @@ def simulate(rec: dict, cfg: Config) -> dict:
         ia, ig, il = ja, jg, jl
         f = p.frame(float(at[ja - 1]) if ja else t)
         rows.append((t, f["bpm"], f["bpm_conf"], f["bpm_locked"], f["fidget"], f["contact"],
-                     f["dbg"]["contact_rms"], f["dbg"]["raw_bpm"], f["dbg"]["best_ch"]))
+                     f["dbg"]["tilt_mg"], f["dbg"]["raw_bpm"], f["dbg"]["best_ch"]))
         t += TICK
     return {"rows": rows, "first_lock": p.first_lock_t}
 
@@ -93,7 +93,10 @@ def report(paths: list[Path], cfg: Config) -> list[dict]:
     results = []
     for path in paths:
         rec = load_recording(path)
-        s = score(rec, simulate(rec, cfg))
+        # labelled sessions start with wrists already on, so the tilt reference can't
+        # see "empty": score the heartbeat with contact forced on
+        c = replace(cfg, contact_mode="always") if rec["meta"].get("true_bpm") else cfg
+        s = score(rec, simulate(rec, c))
         tb = rec["meta"].get("true_bpm")
         print(f"{path.stem[:22]:22} {s['dur']:5.0f} {fmt(tb, '.0f'):>5} {fmt(s['first_lock']):>6} "
               f"{s['locked_frac']:7.0%} {fmt(s.get('err_med')):>6} {fmt(s.get('err_p90')):>6} "
@@ -137,16 +140,23 @@ def spectrum(paths: list[Path]) -> None:
 
 
 def levels(paths: list[Path], cfg: Config) -> None:
-    """Contact-band RMS distribution per recording -> pick contact_on_g / contact_off_g."""
-    print(f"\n{'recording':22} contact-band RMS (g)  p5 / p50 / p95      notes")
+    """Contact = chassis tilt. Absolute accel DC per recording (compare wrists-off vs on),
+    plus the live tilt metric / contact state over time (meaningful when a recording
+    starts with wrists OFF, e.g. an on/off alternation session)."""
+    ax = "xyz".index(cfg.contact_axis[0])
+    print(f"\n{'recording':22} accel DC mean x/y/z (mg)          tilt timeline, mg per 2 s (* = contact)")
     for path in paths:
         rec = load_recording(path)
-        sim = simulate(rec, replace(cfg, contact_mode="always"))
-        c = np.array([r[6] for r in sim["rows"]][30:])
-        print(f"{path.stem[:22]:22} {np.percentile(c, 5):.2e} / {np.percentile(c, 50):.2e} / "
-              f"{np.percentile(c, 95):.2e}   {rec['meta'].get('notes', '')[:40]}")
-    print(f"current: contact_on_g={cfg.contact_on_g:.2e} contact_off_g={cfg.contact_off_g:.2e}"
-          "  (want: on > p95 of wrists-off, < p5 of wrists-on)")
+        dc = rec["accel"].mean(0) * 1000
+        sim = simulate(rec, cfg)
+        rows = sim["rows"]
+        tl = []
+        for i in range(0, len(rows), 60):
+            r = rows[i:i + 60]
+            tl.append(f"{np.mean([x[6] for x in r]):+.1f}{'*' if np.mean([x[5] for x in r]) > 0.5 else ' '}")
+        print(f"{path.stem[:22]:22} {dc[0]:+8.2f} {dc[1]:+8.2f} {dc[2]:+9.2f}   " + " ".join(tl))
+    print(f"contact: axis {cfg.contact_axis}, on > {cfg.contact_on_mg} mg, off < {cfg.contact_off_mg} mg"
+          f"  (wrists add ~2 mg on {'xyz'[ax]} on the M4)")
 
 
 def sweep(paths: list[Path], cfg: Config) -> None:
@@ -164,7 +174,8 @@ def sweep(paths: list[Path], cfg: Config) -> None:
     out = []
     keys = list(grid)
     for vals in itertools.product(*grid.values()):
-        c = replace(cfg, **dict(zip(keys, vals)), lock_off=min(cfg.lock_off, vals[1] - 0.1))
+        c = replace(cfg, **dict(zip(keys, vals)), lock_off=min(cfg.lock_off, vals[1] - 0.1),
+                    contact_mode="always")
         ss = [score(r, simulate(r, c)) for _, r in recs]
         lock = [s["first_lock"] if s["first_lock"] is not None else 60.0 for s in ss]
         err = [s.get("err_med", 30.0) for s in ss]
@@ -211,7 +222,7 @@ def main() -> None:
     ap.add_argument("recordings", nargs="*", type=Path)
     ap.add_argument("--set", action="append", metavar="KEY=VALUE")
     ap.add_argument("--spectrum", action="store_true")
-    ap.add_argument("--levels", action="store_true", help="contact-band RMS per recording")
+    ap.add_argument("--levels", action="store_true", help="accel DC + tilt/contact timeline per recording")
     ap.add_argument("--sweep", action="store_true")
     ap.add_argument("--make-fake", type=int, metavar="N")
     a = ap.parse_args()

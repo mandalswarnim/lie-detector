@@ -88,9 +88,14 @@ def norm_acf(x: np.ndarray, max_lag: int) -> np.ndarray:
 
 @dataclass
 class Group:
-    """One 3-axis sensor (accel or gyro) and its filter chains."""
+    """One 3-axis sensor (accel or gyro) and its filter chains.
+
+    Input may arrive faster than cfg.fs_nominal (e.g. 800 Hz native); it is
+    block-averaged down by an integer factor first. Averaging (not dropping)
+    keeps the out-of-band sensor noise from aliasing into our bands.
+    """
     name: str
-    fs: float
+    fs_in: float
     cfg: Config
     t: Ring = field(init=False)
     pulse: Ring = field(init=False)
@@ -98,22 +103,42 @@ class Group:
     con: Ring = field(init=False)
 
     def __post_init__(self):
-        c, fs = self.cfg, self.fs
+        c = self.cfg
+        self.k = max(1, int(round(self.fs_in / c.fs_nominal)))
+        self.fs = fs = self.fs_in / self.k
+        self._carry_t = np.zeros(0)
+        self._carry_x = np.zeros((0, 3))
         cap = int(fs * max(12.0, c.acf_window_s + 2))
         self.t = Ring(cap, 1)
         self.pulse = Ring(cap, 3)
         self.fid = Ring(int(fs * c.fidget_win_s), 1)
         self.con = Ring(int(fs * 1.0), 1)
+        self.dc = Ring(int(fs * 1.0), 3)          # raw (gravity incl.) for tilt-based contact
         self.f_pulse = StreamFilter(bandpass(c.pulse_lo_hz, c.pulse_hi_hz, fs, c.pulse_order), 3)
         self.f_fid = StreamFilter(bandpass(c.fidget_lo_hz, c.fidget_hi_hz, fs), 3)
-        self.f_con = StreamFilter(bandpass(c.contact_lo_hz, c.contact_hi_hz, fs), 3)
+        self.f_con = StreamFilter(bandpass(1.0, 20.0, fs), 3)   # broadband level, debug only
         self.samples = 0
+
+    def _decimate(self, t: np.ndarray, xyz: np.ndarray):
+        if self.k == 1:
+            return t, xyz
+        t = np.concatenate([self._carry_t, t])
+        xyz = np.concatenate([self._carry_x, xyz])
+        m = len(t) // self.k * self.k
+        self._carry_t, self._carry_x = t[m:], xyz[m:]
+        if self.cfg.decimate == "drop":          # what macimu's own decimation does (A/B only)
+            return t[self.k - 1:m:self.k], xyz[self.k - 1:m:self.k]
+        return t[:m].reshape(-1, self.k).mean(1), xyz[:m].reshape(-1, self.k, 3).mean(1)
 
     def push(self, t: np.ndarray, xyz: np.ndarray) -> None:
         if len(t) == 0:
             return
+        t, xyz = self._decimate(t, xyz)
+        if len(t) == 0:
+            return
         self.samples += len(t)
         self.t.extend(t[:, None])
+        self.dc.extend(xyz)
         self.pulse.extend(self.f_pulse(xyz))
         self.fid.extend(np.sum(self.f_fid(xyz) ** 2, axis=1, keepdims=True))
         self.con.extend(np.sum(self.f_con(xyz) ** 2, axis=1, keepdims=True))
@@ -144,6 +169,8 @@ class Pipeline:
     def reset(self) -> None:
         c = self.cfg
         self.contact = c.contact_mode == "always"
+        self.tilt_ref: float | None = None
+        self.tilt = 0.0
         self._contact_pending_since: float | None = None
         self.contact_since = 0.0
         self.base_hist = {g: deque(maxlen=int(c.baseline_win_s * 30)) for g in ("accel", "gyro")}
@@ -201,6 +228,7 @@ class Pipeline:
                 "raw_bpm": None if self.raw_bpm is None else round(self.raw_bpm, 1),
                 "best_ch": ["ax", "ay", "az", "gx", "gy", "gz"][self.best_ch],
                 "ch_scores": [round(float(s), 2) for s in self.ch_scores],
+                "tilt_mg": round(self.tilt, 2),
                 "contact_rms": float(f"{self.accel.rms(self.accel.con):.3g}"),
                 "fid_rms": [float(f"{self.accel.rms(self.accel.fid):.3g}"),
                             float(f"{self.gyro.rms(self.gyro.fid):.3g}")],
@@ -212,12 +240,34 @@ class Pipeline:
 
     # ---- contact
     def _update_contact(self, now: float) -> None:
+        """Wrists on the palm rest tip the chassis: accel DC moves ~2 mg along
+        the contact axis (measured on the M4: -3.2 mg empty vs -5.0..-5.7 mg
+        with wrists). Vibration energy can't tell on from off (it is sensor
+        noise either way), so contact is tilt relative to an empty reference."""
         c = self.cfg
+        dc = self.accel.dc.last(self.accel.dc.cap)
+        if len(dc) < 0.5 * self.accel.dc.cap:
+            return
+        axis = "xyz".index(c.contact_axis[0])
+        sign = -1.0 if c.contact_axis.endswith("-") else 1.0
+        v = float(dc[:, axis].mean())
+        half = len(dc) // 2
+        # only (re)take a reference from a settled window, never mid-transition
+        steady = abs(dc[half:, axis].mean() - dc[:half, axis].mean()) * 1000.0 < 0.3
+        if self.tilt_ref is None:
+            if not steady:
+                return
+            self.tilt_ref = v                     # assume empty at start / after reset
+        self.tilt = sign * (v - self.tilt_ref) * 1000.0     # mg, positive = wrists pressing
+        if self.tilt < -c.contact_on_mg and steady:
+            # reference was taken with wrists already on; they just lifted
+            self.tilt_ref, self.tilt = v, 0.0
+        if not self.contact and abs(self.tilt) < c.contact_off_mg:
+            self.tilt_ref += 0.002 * (v - self.tilt_ref)    # follow slow drift while empty
         if c.contact_mode == "always":
             self.contact = True
             return
-        rms = self.accel.rms(self.accel.con)
-        want = rms > c.contact_on_g if not self.contact else rms > c.contact_off_g
+        want = self.tilt > (c.contact_off_mg if self.contact else c.contact_on_mg)
         if want == self.contact:
             self._contact_pending_since = None
             return
@@ -256,7 +306,9 @@ class Pipeline:
         if not self.contact or ba <= 0:
             target = 0.0
         else:
-            ratio = max(ra / max(ba, 1e-12), rg / max(bg, 1e-12) if bg > 0 else 0.0)
+            ratio = ra / max(ba, 1e-12)
+            if c.fidget_gyro and bg > 0:     # off by default: gyro is noise-floor bound on the M4
+                ratio = max(ratio, rg / bg)
             lr = np.log10(max(ratio, 1e-9))
             target = float(np.clip((lr - c.fidget_dead) / c.fidget_span, 0.0, 1.0))
         # fast attack, slower release so bursts read clearly on the pen
