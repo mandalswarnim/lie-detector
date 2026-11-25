@@ -3,17 +3,44 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Polygraph</title>
+    <title>Model 7 Polygraph</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <main id="app">
-      <header>
-        <h1>MODEL 7 POLYGRAPH</h1>
-        <span id="lamp" class="lamp" title="sensor link"></span>
+      <header id="top">
+        <div class="plate">
+          <span class="screw"></span>
+          <div>
+            <h1>MODEL 7 POLYGRAPH</h1>
+            <p>ELECTRO-PSYCHOMETRIC RESPONSE RECORDER &middot; SER. No. 0451</p>
+          </div>
+          <span class="screw"></span>
+        </div>
+        <div id="lamps">
+          <div class="lampbox"><span id="lamp-link" class="lamp"></span><label>POWER</label></div>
+          <div class="lampbox"><span id="lamp-signal" class="lamp amber"></span><label>SIGNAL</label></div>
+          <div class="lampbox"><span id="lamp-pulse" class="lamp green"></span><label>PULSE</label></div>
+        </div>
       </header>
-      <section id="readouts"></section>
-      <canvas id="traces"></canvas>
+
+      <section id="stage">
+        <div id="paper-wrap">
+          <canvas id="paper"></canvas>
+          <div class="grain"></div>
+        </div>
+        <aside id="instruments">
+          <canvas id="gauge"></canvas>
+          <div id="counter"><span id="bpm">---</span><small>B.P.M.</small></div>
+          <div id="meter-label">STRESS</div>
+          <div id="stress"><div id="stress-fill"></div></div>
+        </aside>
+      </section>
+
+      <footer id="caption"><span id="caption-text">STAND BY</span></footer>
+
+      <div id="banner" hidden>PULSE ACQUIRED</div>
+      <pre id="debug" hidden></pre>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
