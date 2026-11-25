@@ -79,19 +79,25 @@ sudo .venv/bin/python -m sensor --record off_1     --seconds 30 --notes "wrists 
 Or let a script walk you through all of them: `./tools/record_all.sh` (round 1) and
 `./tools/record_all.sh round2` (800 Hz, wrists on/off test, still, small/big fidget, leaning on the table).
 
-## What the first recordings showed (M4, 2026-11-25)
+## What the recordings showed (M4, 2026-11-25, rounds 1 and 2)
 
-- **Contact:** vibration energy is the sensor's noise floor whether wrists are on or off, so it can't
-  detect contact. Wrists on the palm rest tip the chassis instead: accel Y DC moves ~2 mg. Contact
-  is that tilt against an empty reference (`contact_axis`, `contact_on_mg`). Still being confirmed
-  by `onoff_1`.
-- **Fidget:** the accelerometer at 3-5 Hz separates fidgeting from stillness 4.2x (5-20 Hz: 2.1x).
-  The gyro showed no separation, so it's left out of fidget.
-- **Heartbeat:** at macimu's default 100 Hz it is buried in sensor noise (estimate within ±5 BPM of the
-  watch 7-25% of the time vs ~8% by chance; no lock). macimu reaches 100 Hz by *dropping* 7 of 8
-  samples, which folds high-frequency noise into our band. We now read 800 Hz and *average* to
-  100 Hz (`imu_rate`, `decimate`); round-2 recordings measure whether that rescues the pulse.
-  The "50Hz/25Hz/12Hz" tags in motion_live.py are just wavelet band labels; no such noise exists.
+- **Contact: the IMU cannot tell wrists on from off.** Vibration energy is the same either way.
+  Chassis tilt looked promising in round 1 (~2 mg), but the deliberate on/off test (`onoff_1`) showed
+  normal pressure moves it < 0.1 mg, one change went the wrong way, and shifting in the chair moves
+  it as much. So `contact_mode` defaults to `always` (`contact` is always true). The web state machine
+  should leave IDLE on an operator key. `--set contact_mode=auto` keeps the tilt detector for experiments.
+- **Fidget works.** At 800 Hz (averaged) fidget = max of accel 3-5 Hz and gyro 0.5-5 Hz against the
+  stillness baseline. On `fidget800_1`, small hand shift reads ~0.45, big squirm ~0.77, and stillness
+  P95 is ~0.11. Each wrist move in `onoff_1` shows as a spike. Leaning on or tapping the **table** also
+  reads as fidget (up to 1.0), so nobody touches the table.
+- **Heartbeat: not readable at the palm rest.** Over a full 60 s spectrum gyro-y does show a faint peak at
+  the true rate (+3-4 dB), so the pulse is physically there, but in any 8-20 s window the estimate is
+  within ±5 BPM only 13-43% of the time and confidence doesn't separate right from wrong. Averaging
+  800 Hz beats dropping to 100 Hz (25-30% vs 14-26%) but not enough. Lock thresholds stay strict, so the
+  machine never shows a confident wrong BPM: it will usually say "SUBJECT'S HEART UNREADABLE — HIGHLY
+  SUSPICIOUS" after 12 s, which is the planned joke.
+- Mains-like tones exist at ~100, 34 and 65 Hz but are far above the pulse and fidget bands. The
+  "50Hz/25Hz/12Hz" tags in motion_live.py are just wavelet band labels.
 
 Then `.venv/bin/python tools/tune.py recordings/*.npz`.
 
@@ -100,5 +106,5 @@ Then `.venv/bin/python tools/tune.py recordings/*.npz`.
 - Battery charged. Do not update macOS before the event.
 - Hard table, nothing else touching it.
 - `./run.sh real`, check the debug panel once, press `D` to hide it, `F` for fullscreen.
-- If wrists-on detection misbehaves at the venue: `./run.sh real --set contact_mode=always`.
+- Nobody leans on or touches the table during a question: it reads as fidget.
 - Backup: a screen recording of a good run, and `./run.sh replay recordings/<good>.npz` ready.

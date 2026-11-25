@@ -115,7 +115,9 @@ class Group:
         self.con = Ring(int(fs * 1.0), 1)
         self.dc = Ring(int(fs * 1.0), 3)          # raw (gravity incl.) for tilt-based contact
         self.f_pulse = StreamFilter(bandpass(c.pulse_lo_hz, c.pulse_hi_hz, fs, c.pulse_order), 3)
-        self.f_fid = StreamFilter(bandpass(c.fidget_lo_hz, c.fidget_hi_hz, fs), 3)
+        lo, hi = ((c.fidget_gyro_lo_hz, c.fidget_gyro_hi_hz) if self.name == "gyro"
+                  else (c.fidget_lo_hz, c.fidget_hi_hz))
+        self.f_fid = StreamFilter(bandpass(lo, hi, fs), 3)
         self.f_con = StreamFilter(bandpass(1.0, 20.0, fs), 3)   # broadband level, debug only
         self.samples = 0
 
@@ -286,13 +288,15 @@ class Pipeline:
         out = []
         for g in ("accel", "gyro"):
             h = self.base_hist[g]
-            out.append(float(np.percentile(h, self.cfg.baseline_pct)) if len(h) >= 15 else 0.0)
+            # ~2 s of history before trusting it: a tiny early baseline makes everything look like fidget
+            out.append(float(np.percentile(h, self.cfg.baseline_pct)) if len(h) >= 60 else 0.0)
         return out
 
     def _update_fidget(self, now: float) -> None:
         c = self.cfg
         ra, rg = self.accel.rms(self.accel.fid), self.gyro.rms(self.gyro.fid)
-        if self.contact:
+        warm = self.accel.fid.n >= self.accel.fid.cap and self.gyro.fid.n >= self.gyro.fid.cap     # 1 s window full; earlier RMS reads low
+        if self.contact and warm:
             self.base_hist["accel"].append(ra)
             self.base_hist["gyro"].append(rg)
         if self.calib_until is not None:
@@ -307,7 +311,7 @@ class Pipeline:
             target = 0.0
         else:
             ratio = ra / max(ba, 1e-12)
-            if c.fidget_gyro and bg > 0:     # off by default: gyro is noise-floor bound on the M4
+            if c.fidget_gyro and bg > 0:     # gyro catches slow hand shifts at 800 Hz
                 ratio = max(ratio, rg / bg)
             lr = np.log10(max(ratio, 1e-9))
             target = float(np.clip((lr - c.fidget_dead) / c.fidget_span, 0.0, 1.0))
