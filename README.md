@@ -122,7 +122,7 @@ Operator keys (nothing on screen mentions them):
 | `Space` | IDLE: start calibration · READY: start the answer · VERDICT: next question |
 | `1`–`9` | show preset question n (from `web/src/questions.json`) |
 | `T` / `L` | force the next verdict TRUTH / LIE (the index shown is made consistent) |
-| `[` / `]` | LIE threshold −/+ 5 (default 50; the white tick on the meter) |
+| `[` / `]` | LIE threshold −/+ 5 (default 40; the white tick on the meter) |
 | `R` | reset for the next volunteer (back to IDLE, sensor baseline cleared) |
 | `D` | debug panel: state, link latency, BPM/conf, fidget, mic dB/pitch, baseline, last scores |
 | `H` | heart estimate on/off (default on: shows median of raw estimates when there is no lock) |
@@ -134,7 +134,7 @@ in both calibration and the answer. Pitch counts only if the control question ga
 nothing counts as strong (not maximum) hesitation. Every cue has a dead zone so normal behaviour
 scores ~0: fidget p80 under 0.1, under 0.5 s slower than the subject's usual, pitch change under 8%,
 pulse rise under 3 BPM. "Usual" means the median of the control question and this subject's
-earlier answers. Typical results: calm answer 0-20, small fidget ~30, big squirm 50+, squirm plus
+earlier answers. Typical results (threshold 40): calm answer 0-25, small hand shift ~47, big squirm 53+, squirm plus
 hesitation plus pitch 80+. Each verdict is logged to the browser console as `[verdict] {...}`.
 
 The `--fake` sensor injects random fidget bursts every 8-18 s, so verdicts there are random. Judge

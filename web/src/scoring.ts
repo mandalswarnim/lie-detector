@@ -47,11 +47,11 @@ export function score(base: Baseline, ans: Answer, threshold: number, force: "T"
   // Movement: 80th percentile of fidget over the window vs the still baseline.
   const fid = pctile(ans.fidget, 0.8);
   const moveDelta = Math.max(0, fid - base.fidget);
-  const pFid = clamp((moveDelta - 0.1) / 0.6); // small shift ~0.5, big squirm -> 1
+  const pFid = clamp((moveDelta - 0.05) / 0.45); // small shift ~0.85, big squirm -> 1
 
   // Latency: extra hesitation vs this subject's usual (control + earlier answers).
   // Silence counts, but not fully: it can also be a quiet voice or a mic problem.
-  const pLat = ans.latency === null ? 0.7 : clamp((ans.latency - base.latency - 0.5) / 2.0);
+  const pLat = ans.latency === null ? 0.7 : clamp((ans.latency - base.latency - 0.3) / 1.5);
 
   // Pitch: relative change of median pitch vs the control question. Octave slips from the
   // detector are folded back; under 8% is normal speech variation.
@@ -65,7 +65,7 @@ export function score(base: Baseline, ans: Answer, threshold: number, force: "T"
       return r;
     });
     pitchPct = (median(folded) - 1) * 100;
-    pPitch = clamp((Math.abs(pitchPct) - 8) / 20);
+    pPitch = clamp((Math.abs(pitchPct) - 5) / 15);
   }
 
   // BPM rise only counts when the pulse was locked both times; +3 is noise.
