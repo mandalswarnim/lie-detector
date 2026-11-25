@@ -1,0 +1,1 @@
+Vendored from https://github.com/olvvier/apple-silicon-accelerometer at commit 2036856 (2026-11-25). Unmodified.
