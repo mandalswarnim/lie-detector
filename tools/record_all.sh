@@ -2,6 +2,7 @@
 # Guided recording of tuning sessions. Run from anywhere:
 #   ./tools/record_all.sh            round 1 (first set)
 #   ./tools/record_all.sh round2     round 2: 800 Hz, wrists on/off test, still, fidget
+#   ./tools/record_all.sh round3     hand-position test for the heartbeat (5 x 45 s)
 # Asks for your password once (the sensor needs sudo).
 cd "${0:A:h}/.."
 PY=.venv/bin/python
@@ -9,6 +10,8 @@ SET="${1:-round1}"
 
 # No sound while recording: the speakers shake the chassis and pollute the IMU.
 chime() { afplay /System/Library/Sounds/Glass.aiff 2>/dev/null & }
+# throw away anything typed during a recording (hands on the keyboard) before the next prompt
+drain() { while read -t 0.05 -k 1 _ 2>/dev/null; do :; done }
 
 # name | seconds | labelled? | instruction | cues "sec:TEXT;sec:TEXT"
 case $SET in
@@ -27,7 +30,14 @@ case $SET in
     "fidget800_1|60|yes|Wrists on. Follow the cues: small fidget, then a BIG squirm.|15:SMALL fidget (shift your hands a little);22:STOP. Still.;35:BIG squirm (shift around, like you're nervous);42:STOP. Still."
     "lean800_1|40|no|Hands OFF the laptop. Follow the cues: lean on / tap the TABLE (not the laptop).|10:LEAN your forearms on the TABLE (not the laptop);20:SIT BACK;30:TAP the table lightly a few times"
   ) ;;
-  *) echo "usage: $0 [round1|round2]"; exit 1 ;;
+  round3) sessions=(
+    "pos_palm|45|yes|REFERENCE: wrists resting on the palm rest as usual, normal pressure. Completely still.|"
+    "pos_press|45|yes|Inside of both wrists (where you feel your pulse) pressed FIRMLY on the front edge of the palm rest. Lift your elbows off the table so your arms' weight goes into the laptop. Still.|"
+    "pos_forearm|45|yes|Both forearms lying across the keyboard and palm rest, hands relaxed past the trackpad. Let the arms' weight sink in. Still.|"
+    "pos_flat|45|yes|Both hands FLAT on the keyboard, fingers spread, palms touching the keys, relaxed (don't press keys down; keep clear of the power button, top right). Still.|"
+    "pos_lid|45|yes|Elbows on the table. Rest both index fingertips lightly on the TOP EDGE of the screen. Still.|"
+  ) ;;
+  *) echo "usage: $0 [round1|round2|round3]"; exit 1 ;;
 esac
 
 echo "\n=== MacBook Lie Detector: guided recording ($SET) ===\n"
@@ -65,6 +75,7 @@ for s in $sessions; do
   fi
   sudo $PY -m sensor "${args[@]}"
   wait 2>/dev/null
+  drain
   chime
   if [[ $labelled == yes ]]; then
     read "nb?  Watch heart rate now? (Enter to keep $bpm): "
