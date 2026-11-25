@@ -101,10 +101,54 @@ Or let a script walk you through all of them: `./tools/record_all.sh` (round 1) 
 
 Then `.venv/bin/python tools/tune.py recordings/*.npz`.
 
+## Operating the polygraph
+
+Flow: `IDLE` (blinks "PLACE BOTH WRISTS ON THE PALM REST") → `CALIBRATING` 15 s (8 s "REMAIN
+PERFECTLY STILL. HOLD YOUR BREATH.", then the control question "STATE YOUR NAME") → `READY`
+(question typed out) → `ANSWER` (up to 6 s, ends early when they stop talking) → `ANALYSING` 2 s
+(pens go wild) → `VERDICT` (TRUTH/LIE stamp, deception index, one-liner) → `READY`.
+
+If the pulse hasn't locked 12 s into calibration, the machine stamps "SUBJECT'S HEART UNREADABLE —
+HIGHLY SUSPICIOUS" and keeps a red HEART UNREADABLE tag under the counter. Scoring then uses
+fidget + voice only.
+
+Operator keys (nothing on screen mentions them):
+
+| Key | Does |
+|---|---|
+| `Space` | IDLE: start calibration · READY: start the answer · VERDICT: next question |
+| `1`–`9` | show preset question n (from `web/src/questions.json`) |
+| `T` / `L` | force the next verdict TRUTH / LIE (the index shown is made consistent) |
+| `[` / `]` | LIE threshold −/+ 5 (default 50; the white tick on the meter) |
+| `R` | reset for the next volunteer (back to IDLE, sensor baseline cleared) |
+| `D` | debug panel: state, link latency, BPM/conf, fidget, mic dB/pitch, baseline, last scores |
+| `F` | fullscreen · `M` mute sounds |
+
+Scoring: deception index 0–100 = weighted deltas vs calibration. Weights: fidget 0.45, answer latency
+0.25, voice pitch change 0.15, BPM rise 0.15. The BPM weight counts only when the pulse was locked
+in both calibration and the answer. Pitch counts only if the control question gave a pitch. Saying
+nothing counts as maximum hesitation. Sounds are synthesised (no files) and never play during
+calibration or an answer, because the speakers shake the chassis and the IMU would read it as fidget.
+
+The browser asks for the microphone when the page opens: click Allow once.
+
+### 60-second demo script
+
+1. (0 s) "This MacBook has a motion sensor Apple never told anyone about. It can feel you lie."
+   Volunteer rests both wrists on the palm rest. `Space`.
+2. (0–15 s) Calibration: they hold still and hold their breath, then say their name. The heart
+   either locks (PULSE ACQUIRED) or gets declared UNREADABLE — HIGHLY SUSPICIOUS (laugh line).
+3. (15–30 s) `1`: an easy question. `Space`, they answer, the stamp lands.
+4. (30–55 s) `9` "Are you lying to me right now?" (or `6`/`7`). Press `L` first if you need the
+   punchline to land.
+5. (55–60 s) Read the one-liner aloud. `R` for the next volunteer.
+
 ## Demo-night checklist
 
 - Battery charged. Do not update macOS before the event.
 - Hard table, nothing else touching it.
-- `./run.sh real`, check the debug panel once, press `D` to hide it, `F` for fullscreen.
+- `./run.sh real`, click Allow for the microphone, check the debug panel once (MIC shows dB and
+  jumps when you talk; LINK in ms), press `D` to hide it, `F` for fullscreen.
+- Rehearse once with a real voice: the `MIC` line should show `VOICE` while talking and a pitch.
 - Nobody leans on or touches the table during a question: it reads as fidget.
 - Backup: a screen recording of a good run, and `./run.sh replay recordings/<good>.npz` ready.

@@ -32,14 +32,20 @@
         <aside id="instruments">
           <canvas id="gauge"></canvas>
           <div id="counter"><span id="bpm">---</span><small>B.P.M.</small></div>
+          <div id="heart-tag" hidden>HEART UNREADABLE</div>
           <div id="meter-label">STRESS</div>
-          <div id="stress"><div id="stress-fill"></div></div>
+          <div id="stress"><div id="stress-fill"></div><div id="stress-mark"></div></div>
         </aside>
       </section>
 
-      <footer id="caption"><span id="caption-text">STAND BY</span></footer>
+      <footer id="caption">
+        <div id="caption-label"></div>
+        <span id="caption-text">STAND BY</span>
+        <div id="progress"><div id="progress-fill"></div></div>
+      </footer>
 
       <div id="banner" hidden>PULSE ACQUIRED</div>
+      <div id="stamp" hidden><span id="stamp-word">LIE</span><small id="stamp-index"></small></div>
       <pre id="debug" hidden></pre>
     </main>
     <script type="module" src="/src/main.ts"></script>
