@@ -17,7 +17,7 @@ class Config:
     pulse_hi_hz: float = 3.0
     pulse_order: int = 2
     acf_window_s: float = 8.0          # autocorrelation window (CLAUDE.md: 6-10 s)
-    bpm_min: float = 45.0
+    bpm_min: float = 40.0
     bpm_max: float = 160.0
     near_max_frac: float = 0.85        # pick the shortest lag whose ACF >= frac * global max
     channels: str = "accel,gyro"       # which groups feed the heartbeat estimate
@@ -29,7 +29,7 @@ class Config:
     unlock_n: int = 10                 # ... consecutive estimates to unlock (2 s at 5 Hz)
     lock_spread_bpm: float = 6.0       # BPM spread allowed across the lock_n estimates
     bpm_smooth: float = 0.3            # EMA weight of a new locked estimate
-    motion_gate: float = 0.6           # fidget above this -> BPM estimates untrusted
+    motion_gate: float = 0.3           # fidget above this taints the ACF window for acf_window_s
 
     # --- fidget ---
     fidget_lo_hz: float = 5.0

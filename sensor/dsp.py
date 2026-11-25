@@ -151,12 +151,13 @@ class Pipeline:
         self.calib_until: float | None = None
         self.calib_vals: dict[str, list[float]] = {"accel": [], "gyro": []}
         self.fidget = 0.0
-        self.fidget_high_since: float | None = None
+        self.last_motion_t = -1e9
         self.conf = 0.0
         self.locked = False
         self.bpm: float | None = None
         self.hist: deque = deque(maxlen=max(self.cfg.lock_n, 2))
         self.low_count = 0
+        self.disagree = 0
         self.best_ch = 0
         self.ch_scores = np.zeros(6)
         self.raw_bpm: float | None = None
@@ -262,10 +263,7 @@ class Pipeline:
         k = 0.6 if target > self.fidget else 0.15
         self.fidget += k * (target - self.fidget)
         if self.fidget > c.motion_gate:
-            if self.fidget_high_since is None:
-                self.fidget_high_since = now
-        else:
-            self.fidget_high_since = None
+            self.last_motion_t = now
 
     # ---- heartbeat
     def _channel_acfs(self):
@@ -329,14 +327,15 @@ class Pipeline:
         if c.combine == "best":
             summary = acfs[best]
         else:
-            w = np.clip(scores, 0, None) ** 2
+            # only axes that actually look periodic; pure-noise axes still score ~0.3
+            w = np.where(scores >= 0.6 * scores[best], np.clip(scores, 0, None) ** 2, 0.0)
             summary = (w[:, None] * acfs).sum(0) / w.sum() if w.sum() > 0 else acfs[best]
         lag, conf = self._pick_period(lag_s, summary)
         if lag is None:
             self._miss()
             return
-        if self.fidget_high_since is not None:
-            conf *= 0.3                                     # motion artifact, don't trust
+        if now - self.last_motion_t < c.acf_window_s:
+            conf *= 0.3              # motion inside the ACF window: periodic-looking artifact
         est = 60.0 / lag
         self.raw_bpm = est
         self.conf = 0.5 * self.conf + 0.5 * conf
@@ -360,6 +359,16 @@ class Pipeline:
                 self.low_count = 0
                 if abs(est - self.bpm) <= 15:              # reject wild jumps, keep the lock
                     self.bpm += c.bpm_smooth * (est - self.bpm)
+                    self.disagree = 0
+                elif conf >= c.lock_on:
+                    # confident and consistently elsewhere (e.g. we locked on a
+                    # double period): re-lock instead of staying stuck forever
+                    self.disagree += 1
+                    recent = [b for b, _ in list(self.hist)[-c.lock_n:]]
+                    if (self.disagree >= c.lock_n
+                            and max(recent) - min(recent) <= c.lock_spread_bpm):
+                        self.bpm = float(np.median(recent))
+                        self.disagree = 0
 
     def _miss(self) -> None:
         self.conf *= 0.7
