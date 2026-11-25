@@ -120,7 +120,7 @@ Operator keys (nothing on screen mentions them):
 | Key | Does |
 |---|---|
 | `Space` | IDLE: start calibration · READY: start the answer · VERDICT: next question |
-| `1`–`9` | show preset question n (from `web/src/questions.json`) |
+| `1`–`9` | show preset question n (from `web/src/questions.json`; each has a `suspicion` 0-20 = extra index points on questions people usually lie on: 2, 3, 4, 6, 9 = 20, name = 10) |
 | `T` / `L` | force the next verdict TRUTH / LIE (the index shown is made consistent) |
 | `[` / `]` | LIE threshold −/+ 5 (default 40; the white tick on the meter) |
 | `R` | reset for the next volunteer (back to IDLE, sensor baseline cleared) |

@@ -12,7 +12,14 @@ import { Gauge } from "./gauge";
 import { Voice } from "./voice";
 import { Sounds } from "./sounds";
 import { score, type Baseline, type Result } from "./scoring";
-import questions from "./questions.json";
+import questionsRaw from "./questions.json";
+
+// Each question: text + suspicion (index points added: how likely people lie on it).
+// Plain strings are still accepted.
+type Q = { text: string; suspicion: number };
+const questions: Q[] = (questionsRaw as (string | Q)[]).map((q) =>
+  typeof q === "string" ? { text: q, suspicion: 0 } : { text: q.text, suspicion: q.suspicion ?? 0 },
+);
 
 const sensor = new SensorClient();
 const $ = (id: string) => document.getElementById(id)!;
@@ -119,14 +126,14 @@ function enter(s: State, now: number): void {
     case "READY": {
       $("stamp").hidden = true;
       setProgress(null);
-      const q = questions[qIndex % questions.length];
+      const q = questions[qIndex % questions.length].text;
       setCaption(q.toUpperCase(), { label: `QUESTION ${(qIndex % questions.length) + 1}`, type: true });
       sounds.click();
       break;
     }
     case "ANSWER":
       typing = "";
-      $("caption-text").textContent = questions[qIndex % questions.length].toUpperCase();
+      $("caption-text").textContent = questions[qIndex % questions.length].text.toUpperCase();
       $("caption-label").textContent = "● ANSWER NOW";
       ansFid = [];
       ansBpm = [];
@@ -148,7 +155,7 @@ function enter(s: State, now: number): void {
         pitch: cal.pitch > 0 ? median([cal.pitch, ...subjPitch]) : 0,
       };
       const bpmMean = ansBpm.length ? ansBpm.reduce((a, b) => a + b, 0) / ansBpm.length : null;
-      last = score(base, { fidget: ansFid, latency: ansLatency, pitches: ansPitch, bpm: bpmMean }, threshold, force, subjArousal);
+      last = score(base, { fidget: ansFid, latency: ansLatency, pitches: ansPitch, bpm: bpmMean }, threshold, force, subjArousal, questions[qIndex % questions.length].suspicion);
       subjArousal.push(last.arousal);
       force = null;
       if (ansLatency !== null) subjLat.push(Math.min(ansLatency, 4));

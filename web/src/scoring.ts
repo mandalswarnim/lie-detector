@@ -51,6 +51,7 @@ function arousalOf(base: Baseline, ans: Answer): number {
 
 export function score(
   base: Baseline, ans: Answer, threshold: number, force: "T" | "L" | null, history: number[] = [],
+  suspicion = 0, // extra index points for questions people usually lie on
 ): Result {
   // Each cue has a dead zone so ordinary variation scores 0 and only a clear change counts.
   // Tuned on the M4 recordings: still 6 s windows have fidget p80 ~0 (>0.3 in 3%), a small
@@ -104,6 +105,10 @@ export function score(
     const z = (arousal - med) / (mad + 0.05);
     index = Math.max(index, clamp(28 + 14 * z, 0, 95)); // ~1 "sd" above their usual -> over 40
   }
+
+  // Questions people usually lie on: the machine is primed to expect it. Scaled down for a
+  // perfectly calm answer so a dead-still, instant reply can still come out TRUTH.
+  if (suspicion > 0) index = Math.min(100, index + suspicion * (index > 5 ? 1 : 0.6));
 
   let lie = index >= threshold;
   const forced = force !== null;
