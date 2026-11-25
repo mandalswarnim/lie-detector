@@ -18,6 +18,7 @@ export interface Answer {
 }
 
 export interface Result {
+  arousal: number; // raw "nervousness" of this answer, for the subject's history
   index: number; // 0..100
   parts: { fidget: number; latency: number; pitch: number; bpm: number | null }; // each 0..1
   lie: boolean;
@@ -39,7 +40,18 @@ const pctile = (xs: number[], p: number) => {
 };
 const pick = <T>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
 
-export function score(base: Baseline, ans: Answer, threshold: number, force: "T" | "L" | null): Result {
+/** Raw nervousness with no dead zones: comparable between answers of the same subject. */
+function arousalOf(base: Baseline, ans: Answer): number {
+  const fidMean = ans.fidget.length ? ans.fidget.reduce((a, b) => a + b, 0) / ans.fidget.length : 0;
+  const lat = ans.latency === null ? 0.6 : Math.max(0, Math.min(3, ans.latency - base.latency)) * 0.3;
+  let pit = 0;
+  if (base.pitch > 0 && ans.pitches.length >= 5) pit = Math.min(1, Math.abs(median(ans.pitches) / base.pitch - 1) / 0.2);
+  return 3 * Math.max(0, fidMean - base.fidget) + lat + 0.5 * pit;
+}
+
+export function score(
+  base: Baseline, ans: Answer, threshold: number, force: "T" | "L" | null, history: number[] = [],
+): Result {
   // Each cue has a dead zone so ordinary variation scores 0 and only a clear change counts.
   // Tuned on the M4 recordings: still 6 s windows have fidget p80 ~0 (>0.3 in 3%), a small
   // hand shift ~0.43, a big squirm 0.4-0.45+ with spikes to 1.
@@ -83,6 +95,16 @@ export function score(base: Baseline, ans: Answer, threshold: number, force: "T"
   let index =
     (100 * (w.fidget * pFid + w.latency * pLat + w.pitch * pPitch + w.bpm * (pBpm ?? 0))) / total;
 
+  // Relative to this subject: an answer clearly more nervous than their own usual reads as a
+  // lie even when the absolute cues are small (a still, quick liar still varies a little).
+  const arousal = arousalOf(base, ans);
+  if (history.length >= 2) {
+    const med = median(history);
+    const mad = median(history.map((h) => Math.abs(h - med))) * 1.48;
+    const z = (arousal - med) / (mad + 0.05);
+    index = Math.max(index, clamp(28 + 14 * z, 0, 95)); // ~1 "sd" above their usual -> over 40
+  }
+
   let lie = index >= threshold;
   const forced = force !== null;
   if (force) {
@@ -94,7 +116,7 @@ export function score(base: Baseline, ans: Answer, threshold: number, force: "T"
   index = Math.round(index);
 
   const facts = { movePct: Math.round(moveDelta * 100), latency: ans.latency, pitchPct, bpmDelta };
-  return { index, parts: { fidget: pFid, latency: pLat, pitch: pPitch, bpm: pBpm }, lie, forced, line: oneLiner(lie, facts), facts };
+  return { arousal, index, parts: { fidget: pFid, latency: pLat, pitch: pPitch, bpm: pBpm }, lie, forced, line: oneLiner(lie, facts), facts };
 }
 
 function oneLiner(lie: boolean, f: Result["facts"]): string {

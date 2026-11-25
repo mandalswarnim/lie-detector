@@ -53,6 +53,7 @@ let last: Result | null = null;
 // this subject's own history: verdicts compare against their usual, not just the control question
 let subjLat: number[] = [];
 let subjPitch: number[] = [];
+let subjArousal: number[] = [];
 const log: object[] = [];
 
 // per-phase collectors
@@ -147,7 +148,8 @@ function enter(s: State, now: number): void {
         pitch: cal.pitch > 0 ? median([cal.pitch, ...subjPitch]) : 0,
       };
       const bpmMean = ansBpm.length ? ansBpm.reduce((a, b) => a + b, 0) / ansBpm.length : null;
-      last = score(base, { fidget: ansFid, latency: ansLatency, pitches: ansPitch, bpm: bpmMean }, threshold, force);
+      last = score(base, { fidget: ansFid, latency: ansLatency, pitches: ansPitch, bpm: bpmMean }, threshold, force, subjArousal);
+      subjArousal.push(last.arousal);
       force = null;
       if (ansLatency !== null) subjLat.push(Math.min(ansLatency, 4));
       if (ansPitch.length >= 8) subjPitch.push(median(ansPitch));
@@ -162,6 +164,7 @@ function enter(s: State, now: number): void {
         bpm: last.parts.bpm === null ? null : +last.parts.bpm.toFixed(2),
         lat_s: ansLatency === null ? null : +ansLatency.toFixed(2),
         base_lat_s: +base.latency.toFixed(2),
+        arousal: +last.arousal.toFixed(3),
         pitch_pct: last.facts.pitchPct === null ? null : Math.round(last.facts.pitchPct),
       };
       log.push(entry);
@@ -441,6 +444,7 @@ window.addEventListener("keydown", (e) => {
     last = null;
     subjLat = [];
     subjPitch = [];
+    subjArousal = [];
     force = null;
     heartUnreadable = false;
     everLocked = false;

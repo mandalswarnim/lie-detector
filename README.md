@@ -135,7 +135,9 @@ nothing counts as strong (not maximum) hesitation. Every cue has a dead zone so 
 scores ~0: fidget p80 under 0.1, under 0.5 s slower than the subject's usual, pitch change under 8%,
 pulse rise under 3 BPM. "Usual" means the median of the control question and this subject's
 earlier answers. Typical results (threshold 40): calm answer 0-25, small hand shift ~47, big squirm 53+, squirm plus
-hesitation plus pitch 80+. Each verdict is logged to the browser console as `[verdict] {...}`.
+hesitation plus pitch 80+. From the third answer on, each answer is also compared with this subject's own earlier answers
+(movement + delay + pitch, no dead zones): clearly more nervous than their usual reads as LIE even
+if small. Each verdict is logged to the browser console as `[verdict] {...}`.
 
 The `--fake` sensor injects random fidget bursts every 8-18 s, so verdicts there are random. Judge
 how reliable it is on `./run.sh real` only. Sounds are synthesised (no files) and never play during
