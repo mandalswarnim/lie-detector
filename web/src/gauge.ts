@@ -26,7 +26,7 @@ export class Gauge {
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d")!;
-    new ResizeObserver(() => this.resize()).observe(canvas);
+    new ResizeObserver(() => requestAnimationFrame(() => this.resize())).observe(canvas);
     this.resize();
   }
 
