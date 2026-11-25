@@ -212,6 +212,35 @@ function bannerShow(text: string, cls: string, ms: number, now: number): void {
   bannerUntil = now + ms;
 }
 
+// ---------------------------------------------------------------- heart estimate (H toggles)
+// The IMU can't hold a confident lock at the palm rest (see README), so by default the display
+// falls back to the median of the sensor's raw estimates over the last 20 s, ignoring moments of
+// fidget. On the M4 recordings that median sat ~3-10 BPM from the watch. Display only: scoring
+// still uses locked BPM alone.
+let estimateOn = true;
+const rawHist: { at: number; bpm: number }[] = [];
+let estBpm: number | null = null;
+function updateEstimate(now: number): void {
+  const f = sensor.latest;
+  const raw = (f.dbg?.raw_bpm as number | null | undefined) ?? null;
+  if (!sensor.stale && raw !== null && raw >= 50 && raw <= 120 && f.fidget < 0.3) {
+    if (!rawHist.length || now - rawHist[rawHist.length - 1].at > 200) rawHist.push({ at: now, bpm: raw });
+  }
+  while (rawHist.length && now - rawHist[0].at > 20000) rawHist.shift();
+  if (rawHist.length >= 25) {
+    const m = median(rawHist.map((r) => r.bpm));
+    estBpm = estBpm === null ? m : estBpm + 0.05 * (m - estBpm); // drift slowly, like a real needle
+  }
+}
+/** What the gauge/counter show: real lock or held value first, else the estimate. */
+function shownBpm(): number | null {
+  const f = sensor.latest;
+  if (f.bpm !== null && (f.bpm_locked || !estimateOn || estBpm === null)) return f.bpm;
+  return estimateOn ? estBpm ?? f.bpm : f.bpm;
+}
+const heartShown = () => sensor.latest.bpm_locked || (estimateOn && estBpm !== null);
+let heartWasShown = false;
+
 // ---------------------------------------------------------------- per-frame logic
 function tick(now: number): void {
   const el = (now - since) / 1000;
@@ -219,7 +248,8 @@ function tick(now: number): void {
   const live = !sensor.stale;
 
   // heart lock / unreadable (only once a session has started)
-  if (f.bpm_locked && !wasLocked) {
+  const hs = heartShown();
+  if (hs && !heartWasShown) {
     everLocked = true;
     if (heartUnreadable) heartUnreadable = false;
     if (state !== "IDLE") {
@@ -227,12 +257,12 @@ function tick(now: number): void {
       if (!quietPhase()) sounds.ding();
     }
   }
-  wasLocked = f.bpm_locked;
+  heartWasShown = hs;
   if (state !== "IDLE" && !everLocked && !heartUnreadable && (now - calStart) / 1000 >= HEART_DEADLINE) {
     heartUnreadable = true;
     bannerShow("SUBJECT'S HEART UNREADABLE\n— HIGHLY SUSPICIOUS —", "bad", 4000, now);
   }
-  $("heart-tag").hidden = !heartUnreadable || f.bpm_locked;
+  $("heart-tag").hidden = !heartUnreadable || hs;
 
   // caption typing (with typewriter keys)
   if (typing && typed < typing.length && now - lastKeyAt > 28) {
@@ -294,7 +324,6 @@ function tick(now: number): void {
 const pen = { pulse: 0, move: 0, voice: 0 };
 let gsr = 0;
 let lastNow = 0;
-let wasLocked = false;
 let bannerUntil = 0;
 let wild = 0; // 0..1, pens thrash during ANALYSING
 
@@ -313,7 +342,7 @@ function draw(now: number): void {
   wild += ((state === "ANALYSING" ? 1 : 0) - wild) * (state === "ANALYSING" ? 0.08 : 0.04);
   const thrash = (seed: number) => wild * (wobble(t * 2.3, seed) * 0.6 + (Math.random() - 0.5) * 0.7);
 
-  const pulseGain = !live ? 0 : f.bpm_locked ? 0.85 : 0.22;
+  const pulseGain = !live ? 0 : f.bpm_locked ? 0.85 : heartShown() ? 0.55 : 0.22;
   pen.pulse += ((f.pulse_wave ?? 0) * pulseGain - pen.pulse) * 0.55;
 
   const fid = live ? f.fidget : 0;
@@ -336,15 +365,16 @@ function draw(now: number): void {
   ]);
   chart.draw(now);
 
-  gauge.set(f.bpm);
+  const bpmShown = shownBpm();
+  gauge.set(bpmShown);
   gauge.tremble = Math.max(pen.move, wild);
   gauge.draw(now);
 
   $("banner").hidden = now > bannerUntil;
   $("lamp-link").classList.toggle("on", live || Math.floor(t * 1.5) % 2 === 0);
-  $("lamp-signal").classList.toggle("on", f.bpm_held && Math.random() < 0.55);
-  $("lamp-pulse").classList.toggle("on", f.bpm_locked && ((t * (f.bpm ?? 60)) / 60) % 1 < 0.3);
-  $("bpm").textContent = f.bpm === null ? "---" : String(Math.round(f.bpm)).padStart(3, " ");
+  $("lamp-signal").classList.toggle("on", !heartShown() && f.bpm_held && Math.random() < 0.55);
+  $("lamp-pulse").classList.toggle("on", heartShown() && ((t * (bpmShown ?? 60)) / 60) % 1 < 0.3);
+  $("bpm").textContent = bpmShown === null ? "---" : String(Math.round(bpmShown)).padStart(3, " ");
 
   // stress meter: live GSR, or the deception index while a verdict is up
   const meter = state === "VERDICT" && last ? last.index / 100 : Math.min(1, gsr * 1.1 + wild * Math.random() * 0.6);
@@ -370,6 +400,7 @@ function renderDebug(now: number): void {
     `LINK     ${sensor.stale ? "WAITING" : `${sensor.latencyMs.toFixed(0)} ms`}`,
     `BPM      ${n(f.bpm, 1)}  ${f.bpm_locked ? "LOCKED" : f.bpm_held ? "HELD" : "SEARCHING"}  conf ${n(f.bpm_conf)}  raw ${n(d.raw_bpm as number, 1)} ${d.best_ch ?? ""}`,
     `FIDGET   ${n(f.fidget)}   GSR ${n(gsr)}   CONTACT ${f.contact ? "ON" : "OFF"}`,
+    `HEART    ${estimateOn ? "estimate ON" : "estimate off"}  est ${n(estBpm, 1)}  (${rawHist.length} raw)  shown ${n(shownBpm(), 0)}`,
     `MIC      ${voice.denied ? "DENIED" : voice.ready ? `${n(voice.db, 0)} dB  lvl ${n(voice.level)}  pitch ${n(voice.pitch, 0)} Hz ${voice.active ? "VOICE" : ""}` : "starting"}`,
     `BASE     ${b ? `fid ${n(b.fidget)}  lat ${n(b.latency)} s  pitch ${n(b.pitch, 0)}  bpm ${n(b.bpm, 1)}` : "--"}`,
     `LAST     ${last ? `${last.lie ? "LIE" : "TRUTH"} ${last.index}${last.forced ? " (forced)" : ""}  fid ${n(p!.fidget)} lat ${n(p!.latency)} pit ${n(p!.pitch)} bpm ${n(p!.bpm)}` : "--"}`,
@@ -422,6 +453,8 @@ window.addEventListener("keydown", (e) => {
   } else if (k === "f") {
     if (document.fullscreenElement) document.exitFullscreen();
     else document.documentElement.requestFullscreen().catch(() => {});
+  } else if (k === "h") {
+    estimateOn = !estimateOn;
   } else if (k === "m") {
     sounds.muted = !sounds.muted;
     if (sounds.muted) sounds.scratchOn(0);
@@ -447,6 +480,7 @@ function autoStart(now: number): void {
 enter("IDLE", performance.now());
 function frame(now: number): void {
   voice.update(now);
+  updateEstimate(now);
   autoStart(now);
   tick(now);
   draw(now);

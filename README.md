@@ -125,6 +125,7 @@ Operator keys (nothing on screen mentions them):
 | `[` / `]` | LIE threshold −/+ 5 (default 50; the white tick on the meter) |
 | `R` | reset for the next volunteer (back to IDLE, sensor baseline cleared) |
 | `D` | debug panel: state, link latency, BPM/conf, fidget, mic dB/pitch, baseline, last scores |
+| `H` | heart estimate on/off (default on: shows median of raw estimates when there is no lock) |
 | `F` | fullscreen · `M` mute sounds |
 
 Scoring: deception index 0–100 = weighted deltas vs calibration. Weights: fidget 0.45, answer latency
