@@ -50,6 +50,10 @@ let everLocked = false;
 let calStart = 0;
 let baseline: Baseline | null = null;
 let last: Result | null = null;
+// this subject's own history: verdicts compare against their usual, not just the control question
+let subjLat: number[] = [];
+let subjPitch: number[] = [];
+const log: object[] = [];
 
 // per-phase collectors
 let calFid: number[] = [];
@@ -136,10 +140,32 @@ function enter(s: State, now: number): void {
       break;
     case "VERDICT": {
       sounds.scratchOn(0);
-      const base = baseline ?? { fidget: 0, latency: 1, pitch: 0, bpm: null };
+      const cal = baseline ?? { fidget: 0, latency: 1, pitch: 0, bpm: null };
+      const base = {
+        ...cal,
+        latency: median([cal.latency, ...subjLat]),
+        pitch: cal.pitch > 0 ? median([cal.pitch, ...subjPitch]) : 0,
+      };
       const bpmMean = ansBpm.length ? ansBpm.reduce((a, b) => a + b, 0) / ansBpm.length : null;
       last = score(base, { fidget: ansFid, latency: ansLatency, pitches: ansPitch, bpm: bpmMean }, threshold, force);
       force = null;
+      if (ansLatency !== null) subjLat.push(Math.min(ansLatency, 4));
+      if (ansPitch.length >= 8) subjPitch.push(median(ansPitch));
+      const entry = {
+        q: (qIndex % questions.length) + 1,
+        verdict: last.lie ? "LIE" : "TRUTH",
+        index: last.index,
+        forced: last.forced,
+        fidget: +last.parts.fidget.toFixed(2),
+        latency: +last.parts.latency.toFixed(2),
+        pitch: +last.parts.pitch.toFixed(2),
+        bpm: last.parts.bpm === null ? null : +last.parts.bpm.toFixed(2),
+        lat_s: ansLatency === null ? null : +ansLatency.toFixed(2),
+        base_lat_s: +base.latency.toFixed(2),
+        pitch_pct: last.facts.pitchPct === null ? null : Math.round(last.facts.pitchPct),
+      };
+      log.push(entry);
+      console.log("[verdict]", JSON.stringify(entry));
       showStamp(last);
       setCaption(last.line, { label: `DECEPTION INDEX ${last.index}` });
       break;
@@ -382,6 +408,8 @@ window.addEventListener("keydown", (e) => {
     sounds.scratchOn(0);
     baseline = null;
     last = null;
+    subjLat = [];
+    subjPitch = [];
     force = null;
     heartUnreadable = false;
     everLocked = false;
@@ -428,4 +456,4 @@ function frame(now: number): void {
 requestAnimationFrame(frame);
 
 // expose for console debugging
-Object.assign(window as object, { sensor, voice, sounds, polygraph: { get state() { return state; }, get last() { return last; }, get baseline() { return baseline; } } });
+Object.assign(window as object, { sensor, voice, sounds, polygraph: { get state() { return state; }, get last() { return last; }, get baseline() { return baseline; }, log }  });

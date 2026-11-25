@@ -40,30 +40,40 @@ const pctile = (xs: number[], p: number) => {
 const pick = <T>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
 
 export function score(base: Baseline, ans: Answer, threshold: number, force: "T" | "L" | null): Result {
+  // Each cue has a dead zone so ordinary variation scores 0 and only a clear change counts.
+  // Tuned on the M4 recordings: still 6 s windows have fidget p80 ~0 (>0.3 in 3%), a small
+  // hand shift ~0.43, a big squirm 0.4-0.45+ with spikes to 1.
+
   // Movement: 80th percentile of fidget over the window vs the still baseline.
-  // fidget is already normalised against the sensor's stillness baseline.
   const fid = pctile(ans.fidget, 0.8);
   const moveDelta = Math.max(0, fid - base.fidget);
-  const pFid = clamp(moveDelta / 0.45);
+  const pFid = clamp((moveDelta - 0.1) / 0.6); // small shift ~0.5, big squirm -> 1
 
-  // Latency: extra hesitation vs the control question. Silence is suspicious.
-  const pLat = ans.latency === null ? 1 : clamp((ans.latency - base.latency - 0.3) / 2.0);
+  // Latency: extra hesitation vs this subject's usual (control + earlier answers).
+  // Silence counts, but not fully: it can also be a quiet voice or a mic problem.
+  const pLat = ans.latency === null ? 0.7 : clamp((ans.latency - base.latency - 0.5) / 2.0);
 
-  // Pitch: relative change of median pitch vs control (stress raises it).
+  // Pitch: relative change of median pitch vs the control question. Octave slips from the
+  // detector are folded back; under 8% is normal speech variation.
   let pPitch = 0;
   let pitchPct: number | null = null;
-  if (base.pitch > 0 && ans.pitches.length >= 5) {
-    const p = median(ans.pitches);
-    pitchPct = ((p - base.pitch) / base.pitch) * 100;
-    pPitch = clamp(Math.abs(pitchPct) / 15);
+  if (base.pitch > 0 && ans.pitches.length >= 8) {
+    const folded = ans.pitches.map((p) => {
+      let r = p / base.pitch;
+      while (r > 1.6) r /= 2;
+      while (r < 0.625) r *= 2;
+      return r;
+    });
+    pitchPct = (median(folded) - 1) * 100;
+    pPitch = clamp((Math.abs(pitchPct) - 8) / 20);
   }
 
-  // BPM rise only counts when the pulse was locked both times.
+  // BPM rise only counts when the pulse was locked both times; +3 is noise.
   let pBpm: number | null = null;
   let bpmDelta: number | null = null;
   if (base.bpm !== null && ans.bpm !== null) {
     bpmDelta = ans.bpm - base.bpm;
-    pBpm = clamp(bpmDelta / 10);
+    pBpm = clamp((bpmDelta - 3) / 10);
   }
 
   const w = { ...WEIGHTS };
@@ -89,11 +99,11 @@ export function score(base: Baseline, ans: Answer, threshold: number, force: "T"
 
 function oneLiner(lie: boolean, f: Result["facts"]): string {
   const bits: string[] = [];
-  bits.push(f.movePct >= 5 ? `Movement +${f.movePct}%.` : "Movement nominal.");
+  bits.push(f.movePct >= 10 ? `Movement +${f.movePct}%.` : "Movement nominal.");
   bits.push(f.latency === null ? "No answer given." : `${lie ? "Hesitation" : "Answered in"} ${f.latency.toFixed(1)} s.`);
-  if (f.pitchPct !== null && Math.abs(f.pitchPct) >= 4)
+  if (f.pitchPct !== null && Math.abs(f.pitchPct) >= 8)
     bits.push(`Pitch ${f.pitchPct > 0 ? "+" : ""}${Math.round(f.pitchPct)}%.`);
-  if (f.bpmDelta !== null && Math.abs(f.bpmDelta) >= 2)
+  if (f.bpmDelta !== null && Math.abs(f.bpmDelta) >= 3)
     bits.push(`Pulse ${f.bpmDelta > 0 ? "+" : ""}${Math.round(f.bpmDelta)}.`);
   const tail = lie
     ? pick([

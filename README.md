@@ -127,7 +127,14 @@ Operator keys (nothing on screen mentions them):
 Scoring: deception index 0–100 = weighted deltas vs calibration. Weights: fidget 0.45, answer latency
 0.25, voice pitch change 0.15, BPM rise 0.15. The BPM weight counts only when the pulse was locked
 in both calibration and the answer. Pitch counts only if the control question gave a pitch. Saying
-nothing counts as maximum hesitation. Sounds are synthesised (no files) and never play during
+nothing counts as strong (not maximum) hesitation. Every cue has a dead zone so normal behaviour
+scores ~0: fidget p80 under 0.1, under 0.5 s slower than the subject's usual, pitch change under 8%,
+pulse rise under 3 BPM. "Usual" means the median of the control question and this subject's
+earlier answers. Typical results: calm answer 0-20, small fidget ~30, big squirm 50+, squirm plus
+hesitation plus pitch 80+. Each verdict is logged to the browser console as `[verdict] {...}`.
+
+The `--fake` sensor injects random fidget bursts every 8-18 s, so verdicts there are random. Judge
+how reliable it is on `./run.sh real` only. Sounds are synthesised (no files) and never play during
 calibration or an answer, because the speakers shake the chassis and the IMU would read it as fidget.
 
 The browser asks for the microphone when the page opens: click Allow once.
