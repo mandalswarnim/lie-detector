@@ -76,6 +76,8 @@ sudo .venv/bin/python -m sensor --record fidget_1  --true-bpm 72 --seconds 60 --
 sudo .venv/bin/python -m sensor --record off_1     --seconds 30 --notes "wrists OFF the laptop"
 ```
 
+Or let a script walk you through all of them: `./tools/record_all.sh`
+
 Then `.venv/bin/python tools/tune.py recordings/*.npz`.
 
 ## Demo-night checklist
