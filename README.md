@@ -1,14 +1,61 @@
 # MacBook Lie Detector
 
-A 1970s polygraph that reads the MacBook Pro's undocumented internal IMU
-(accelerometer + gyroscope in the Apple Sensor Processing Unit) through the palm rest.
-See `CLAUDE.md` for the full brief.
+**A 1970s polygraph that runs on a MacBook Pro's hidden motion sensor.**
+
+![The Model 7 Polygraph console stamping LIE](docs/polygraph.jpg)
+
+Apple Silicon MacBook Pros have an accelerometer and gyroscope inside the Apple Sensor
+Processing Unit that Apple never documented (tested on an M4). This project reads it through the palm rest.
+A volunteer rests their wrists on the laptop, the operator asks questions, and the machine
+feels them squirm, listens to how they answer, and stamps **TRUTH** or **LIE**.
+
+No extra hardware: no watch, no phone, no webcam. Just the laptop. It's theatre built on real
+signals; the verdict is a heuristic, and that's the fun of it.
+
+## How it works
+
+```
+ wrists on palm rest ──► internal IMU (800 Hz) ──► sensor/ (Python, sudo)
+                                                    filter + fidget + pulse
+                                                         │ JSON over WebSocket, 30 Hz
+ microphone ──► voice pitch + answer delay ──►  web/ polygraph page ──► TRUTH / LIE
+```
+
+- **Movement (the main signal).** Hand shifts and squirms on the palm rest, measured against the
+  subject's own stillness during calibration. This is what the sensor detects reliably.
+- **Answer delay and voice pitch.** From the microphone: how long before they speak, and whether
+  their voice goes up compared with their normal voice.
+- **Pulse (bonus).** The ballistocardiogram is faint at the palm rest. The gauge shows a slow
+  estimate, and the score only uses it on a confident lock.
+- **Scoring.** Weighted changes vs calibration (movement 45%, delay 25%, pitch 15%, pulse 15%),
+  compared with the subject's own earlier answers, plus a per-question "suspicion" for the
+  questions people usually lie on. Deception index 0-100, LIE at 40 by default.
+
+The console: graph paper scrolling under four ink pens (PULSE, MOVEMENT, VOICE, GSR), a brass BPM
+gauge, signal lamps, a typewriter caption, synthesised relay clicks and pen scratch, and a rubber
+stamp that slams down with a screen shake. Fully offline.
+
+## Quick start
+
+```zsh
+./run.sh            # fake sensor, no sudo: try the whole show
+./run.sh real       # the real IMU (asks for your password)
+```
+
+Then on the page: allow the microphone, click once, `F` fullscreen. Wrists on the palm rest,
+`Space` to calibrate, `1`-`9` to pick a question, `Space` to answer, `R` for the next volunteer.
+Full operator guide below.
+
+Needs an Apple Silicon MacBook Pro (built on an M4), Python 3.12+, Node 20+.
+
+## Project layout
 
 ```
 sensor/   Python: macimu -> DSP -> JSON over ws://localhost:8765 @ 30 Hz
 web/      Vite + TypeScript page on http://localhost:5173
 tools/    offline analysis / tuning (no sudo)
 recordings/  raw sessions (.npz) with true-BPM labels
+docs/     screenshot
 apple-silicon-accelerometer/  vendored macimu (unmodified)
 ```
 
